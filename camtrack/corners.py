@@ -86,10 +86,6 @@ def _build_impl(frame_sequence: pims.FramesSequence,
 
     frame_sequence = [(frame * 255).astype(np.uint8) for frame in frame_sequence]
 
-    lk_params = dict(winSize=(15, 15),
-                     maxLevel=2,
-                     criteria=(cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.03))
-
     image_0 = frame_sequence[0]
     corners_0 = get_corners(image_0)
     n_corners = corners_0.shape[0]
