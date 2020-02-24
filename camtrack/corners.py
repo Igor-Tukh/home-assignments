@@ -117,37 +117,35 @@ def _build_impl(frame_sequence: pims.FramesSequence,
 
         corners_1 = get_corners(image_1)
         new_points = corners_1.squeeze()
-        added = np.zeros(new_points.shape[0], dtype=bool)
 
         # Heuristics: let's iteratively select the furthest new corner.
-        while n_corners < MAX_CORNERS:
+        min_dists = {}
+        for ind, new_point in enumerate(new_points):
+            min_dist = None
+            for point in points:
+                dist = np.linalg.norm(point - new_point)
+                if min_dist is None or dist < min_dist:
+                    min_dist = dist
+            min_dists[ind] = min_dist
+
+        while n_corners < MAX_CORNERS and len(min_dists) > 0:
             max_min_dist = None
             next_point_ind = -1
-            for ind, new_point in enumerate(new_points):
-                if added[ind]:
-                    continue
-
-                min_dist = None
-                for point in points:
-                    dist = np.linalg.norm(point - new_point)
-                    if min_dist is None or dist < min_dist:
-                        min_dist = dist
-
-                if min_dist is not None and min_dist < MIN_DISTANCE + EPS:
-                    continue
-
-                if min_dist is None or max_min_dist is None or max_min_dist < min_dist:
-                    max_min_dist = min_dist
+            for ind, dist in min_dists.items():
+                if dist is None or max_min_dist is None or max_min_dist < dist:
+                    max_min_dist = dist
                     next_point_ind = ind
 
-            if next_point_ind == -1:
+            if next_point_ind == -1 or max_min_dist < MIN_DISTANCE + EPS:
                 break
 
             ids = np.concatenate([ids, [id_counter]])
             points = np.concatenate([points, [new_points[next_point_ind]]])
             sizes = np.concatenate([sizes, [5]])
 
-            added[next_point_ind] = True
+            min_dists.pop(next_point_ind)
+            for ind in min_dists.keys():
+                min_dists[ind] = min(min_dists[ind], np.linalg.norm(new_points[ind] - new_points[next_point_ind]))
 
             n_corners += 1
             id_counter += 1
