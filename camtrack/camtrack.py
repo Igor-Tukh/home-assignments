@@ -89,7 +89,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
             corner_ids = list(corner_storage[ind].ids.reshape(-1))
             intersection_inds = [point_ind for point_ind in corner_ids
                                  if point_ind in all_points and all_points[point_ind] is not None]
-            # There is an assert, so points number has to be at least 6
+            # There is an assert, so points number has to be at least 5
             if len(intersection_inds) < 5:
                 continue
             # print(ind, len(corner_storage), len(corner_storage[ind].points), np.max(intersection_inds))
