@@ -223,6 +223,7 @@ def triangulate_correspondences(correspondences: Correspondences,
         parameters.min_triangulation_angle_deg
     )
     common_mask = reprojection_error_mask & z_mask & angle_mask
+    # print(np.sum(reprojection_error_mask), np.sum(z_mask), np.sum(angle_mask), np.sum(common_mask))
 
     return points3d[common_mask], correspondences.ids[common_mask], median_cos
 
