@@ -22,7 +22,8 @@ from _camtrack import (
     build_correspondences,
     triangulate_correspondences,
     pose_to_view_mat3x4,
-    rodrigues_and_translation_to_view_mat3x4
+    rodrigues_and_translation_to_view_mat3x4,
+    eye3x4
 )
 
 """
@@ -35,8 +36,8 @@ Params section:
 """
 
 MAX_PROJECTION_ERROR = 1.
-MIN_TRIANGULATION_ANGLE_DEG = .007
-MIN_DEPTH = .001
+MIN_TRIANGULATION_ANGLE_DEG = 3.
+MIN_DEPTH = .1
 
 TRIANGULATION_PARAMS = TriangulationParameters(max_reprojection_error=MAX_PROJECTION_ERROR,
                                                min_triangulation_angle_deg=MIN_TRIANGULATION_ANGLE_DEG,
@@ -65,8 +66,7 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
                           known_view_1: Optional[Tuple[int, Pose]] = None,
                           known_view_2: Optional[Tuple[int, Pose]] = None) \
         -> Tuple[List[Pose], PointCloud]:
-    if known_view_1 is None or known_view_2 is None:
-        raise NotImplementedError()
+    # if known_view_1 is None or known_view_2 is None:
 
     rgb_sequence = frameseq.read_rgb_f32(frame_sequence_path)
     intrinsic_mat = to_opencv_camera_mat3x3(
@@ -74,12 +74,54 @@ def track_and_calc_colors(camera_parameters: CameraParameters,
         rgb_sequence[0].shape[0]
     )
 
+    known_view_1 = (0, eye3x4())
+    max_points_number = -1
+    max_frame_number = None
+    max_frame_pose = None
+    for frame_ind in range(1, len(corner_storage)):
+        print(f'Initialization: processing frame {frame_ind}')
+
+        correspondences = build_correspondences(corner_storage[0], corner_storage[frame_ind])
+        if correspondences.points_1.size * correspondences.points_2.size == 0:
+            continue
+
+        ret_val, mask = cv2.findEssentialMat(correspondences.points_1, correspondences.points_2, intrinsic_mat)
+        if ret_val is None or mask is None:
+            continue
+        # cv2.error: OpenCV(4.1.0) ../modules/calib3d/src/five-point.cpp:648: error: (-215:Assertion failed) E.cols == 3 && E.rows == 3 in function 'decomposeEssentialMat'
+        if ret_val.shape[0] != 3 or ret_val.shape[1] != 3:
+            continue
+
+        R1, R2, t = cv2.decomposeEssentialMat(ret_val)
+        R1 = R1.T
+        R2 = R2.T
+        number = -1
+        pose = None
+        for possible_pose in \
+                [Pose(R1, R1.dot(t)), Pose(R2, R2.dot(t)), Pose(R1, R1.dot(-t)), Pose(R2, R2.dot(-t))]:
+            points = triangulate_correspondences(correspondences,
+                                                 known_view_1[1],
+                                                 pose_to_view_mat3x4(possible_pose),
+                                                 intrinsic_mat, TRIANGULATION_PARAMS)[0]
+            if number < len(points):
+                number = len(points)
+                pose = possible_pose
+
+        if number > max_points_number:
+            max_points_number = number
+            max_frame_number = frame_ind
+            max_frame_pose = pose
+            print(f'Frame {frame_ind} is the best on a prefix')
+
+    print(f'Known view 1: {0}, known view 2: {max_frame_number}')
+    known_view_2 = (max_frame_number, max_frame_pose)
+
     view_mats_tmp = [None for _ in range(len(corner_storage))]
     all_points = {}
     not_none_mats = [known_view_1[0], known_view_2[0]]
     none_mats = set([ind for ind in range(len(view_mats_tmp)) if ind not in not_none_mats])
 
-    view_mats_tmp[known_view_1[0]] = pose_to_view_mat3x4(known_view_1[1])
+    view_mats_tmp[known_view_1[0]] = known_view_1[1]
     view_mats_tmp[known_view_2[0]] = pose_to_view_mat3x4(known_view_2[1])
     add_new_points(corner_storage, view_mats_tmp, known_view_1[0], known_view_2[0], all_points, intrinsic_mat)
 
